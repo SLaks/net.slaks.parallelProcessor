@@ -3,7 +3,7 @@ package net.slaks.parallelProcessor.external;
 /**
  * Provides file paths to pass to the converter.
  * 
- * @author SSL
+ * @author SLaks
  * 
  */
 public interface FileSource {

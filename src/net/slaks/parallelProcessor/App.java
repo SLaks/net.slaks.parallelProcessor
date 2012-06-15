@@ -1,5 +1,7 @@
 package net.slaks.parallelProcessor;
 
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
 import net.slaks.parallelProcessor.external.*;
 
 public class App {
@@ -10,8 +12,11 @@ public class App {
 	static final FileSource fileSource = new RandomFileSource("a", "b", "c",
 			poison);
 
-	static final HtmlConverter converter = new PoisonableConverter(poison,
-			new UnreliableConverter(.3, new StubConverter()));
+	static final FileSystem fileSystem = new UnreliableFileSystem(.2);
+
+	static final HtmlConverter converter = new FileSystemLinkedConverter(
+			fileSystem, new PoisonableConverter(poison,
+					new UnreliableConverter(.3, new StubConverter())));
 
 	public static void main(String[] args) {
 		for (int i = 0; i < numThreads; i++) {
@@ -25,6 +30,8 @@ public class App {
 		System.out.println("Thread #" + Thread.currentThread().getId() + ": "
 				+ text);
 	}
+
+	static final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
 	static class Runner implements Runnable {
 		@Override
@@ -44,9 +51,26 @@ public class App {
 			if (retries <= 0)
 				throw new IllegalArgumentException();
 			try {
+				lock.readLock().lock();
 				converter.convert(source, target);
+
+				lock.readLock().unlock();
 			} catch (ConversionFailedException e) {
 				// TODO: Filesystem recovery
+
+				lock.readLock().unlock();
+				if (!fileSystem.isUp()) {
+					log("Filesystem is down");
+					// If the file system is down, one thread should
+					// enter the write lock and fix it, while the others wait
+					// for it.
+
+					if (lock.writeLock().tryLock()) {
+						log("Repairing filesystem");
+						fileSystem.tryFix();
+						lock.writeLock().unlock();
+					}
+				}
 
 				if (retries == 1) {
 					log(" Conversion failed; giving up");
@@ -56,6 +80,7 @@ public class App {
 					return tryConvert(source, target, retries - 1);
 				}
 			}
+
 			log(" Conversion succeeded");
 			return true;
 		}
