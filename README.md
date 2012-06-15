@@ -8,12 +8,12 @@ The conversion process has three failure modes:
  - Poison inputs which will always fail and cannot be converted
  - Temporary filesystem failures which will cause all conversions to fail until the filesystem comes back up.
  
- Failures are non-descriptive; the program does not know why each failure happens
+Failures are non-descriptive; the program does not know why each failure happens
  
- To handle the first two cases, each file should be attempted three times before giving up.
+To handle the first two cases, each file should be attempted three times before giving up.
  
- To handle filesystem issues, the program will check whether the filesystem is up (by reading a known marker file) after each failure.  
- If the filesystem is down, it will run a remount script (one globally, not per-thread) which is expected to bring the filesystem back up.
- If three successive remounts fail, the program is to give up and terminate.
+To handle filesystem issues, the program will check whether the filesystem is up (by reading a known marker file) after each failure.  
+If the filesystem is down, it will run a remount script (one globally, not per-thread) which is expected to bring the filesystem back up.
+If three successive remounts fail, the program is to give up and terminate.
  
- In this implementation, all external interactions (conversions, queue, and filesystem) are mocked in the `external` package.
+In this implementation, all external interactions (conversions, queue, and filesystem) are mocked in the `external` package.
