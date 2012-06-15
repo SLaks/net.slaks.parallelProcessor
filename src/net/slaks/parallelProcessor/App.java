@@ -17,17 +17,25 @@ public class App {
 		for (int i = 0; i < numThreads; i++) {
 			new Thread(new Runner()).start();
 		}
-		//Let them run...
+		// Let them run...
+	}
+
+	// A real logging framework seems like overkill
+	static void log(String text) {
+		System.out.println("Thread #" + Thread.currentThread().getId() + ": "
+				+ text);
 	}
 
 	static class Runner implements Runnable {
-
 		@Override
 		public void run() {
+			log("Starting thread");
+
 			while (true) {
 				String source = fileSource.getFile();
-				String target = "";	//TODO: Create target path
+				String target = ""; // TODO: Create target path
 
+				log("Converting " + source);
 				tryConvert(source, target, maxRetries);
 			}
 		}
@@ -37,15 +45,19 @@ public class App {
 				throw new IllegalArgumentException();
 			try {
 				converter.convert(source, target);
-				return true;
 			} catch (ConversionFailedException e) {
 				// TODO: Filesystem recovery
 
-				if (retries == 1)
+				if (retries == 1) {
+					log(" Conversion failed; giving up");
 					return false;
-				else
+				} else {
+					log(" Conversion failed; trying again");
 					return tryConvert(source, target, retries - 1);
+				}
 			}
+			log(" Conversion succeeded");
+			return true;
 		}
 	}
 }
