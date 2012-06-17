@@ -1,5 +1,6 @@
 package net.slaks.parallelProcessor;
 
+import java.util.Calendar;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import net.slaks.parallelProcessor.external.*;
@@ -27,8 +28,8 @@ public class App {
 
 	// A real logging framework seems like overkill
 	static void log(String text) {
-		System.out.println("Thread #" + Thread.currentThread().getId() + ": "
-				+ text);
+		System.out.format("Thread #%02d: [%1$tH:%1$tM:%1$tS:%1$tL] %3$s\n",
+				Thread.currentThread().getId(), Calendar.getInstance(), text);
 	}
 
 	static final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -56,7 +57,6 @@ public class App {
 
 				lock.readLock().unlock();
 			} catch (ConversionFailedException e) {
-				// TODO: Filesystem recovery
 
 				lock.readLock().unlock();
 				if (!fileSystem.isUp()) {
@@ -67,7 +67,7 @@ public class App {
 
 					if (lock.writeLock().tryLock()) {
 						log("Repairing filesystem");
-						fileSystem.tryFix();
+						tryFixFileSystem();
 						lock.writeLock().unlock();
 					}
 				}
@@ -83,6 +83,17 @@ public class App {
 
 			log(" Conversion succeeded");
 			return true;
+		}
+
+		static void tryFixFileSystem() {
+			int tries = 0;
+			do {
+				if (++tries > maxRetries) {
+					log("Couldn't repair filesystem; exiting");
+					System.exit(1);
+				}
+				fileSystem.tryFix();
+			} while (!fileSystem.isUp());
 		}
 	}
 }
