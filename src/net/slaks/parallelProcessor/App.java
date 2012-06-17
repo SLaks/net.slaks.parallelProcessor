@@ -28,7 +28,7 @@ public class App {
 
 	// A real logging framework seems like overkill
 	static void log(String text) {
-		System.out.format("Thread #%02d: [%1$tH:%1$tM:%1$tS:%1$tL] %3$s\n",
+		System.out.format("Thread #%02d\t[%2$tH:%2$tM:%2$tS:%2$tL]\t%3$s\n",
 				Thread.currentThread().getId(), Calendar.getInstance(), text);
 	}
 
