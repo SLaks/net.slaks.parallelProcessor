@@ -19,3 +19,5 @@ While remounting the filesystem, no other threads should be doing anything.
 
  
 In this implementation, all external interactions (conversions, queue, and filesystem) are mocked in the `external` package.
+
+When analyzing the output log, it can be useful to paste to Excel and sort and/or filter.

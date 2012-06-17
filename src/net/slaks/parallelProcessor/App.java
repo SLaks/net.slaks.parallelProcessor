@@ -1,7 +1,8 @@
 package net.slaks.parallelProcessor;
 
 import java.util.Calendar;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
 
 import net.slaks.parallelProcessor.external.*;
 
@@ -13,7 +14,7 @@ public class App {
 	static final FileSource fileSource = new RandomFileSource("a", "b", "c",
 			poison);
 
-	static final FileSystem fileSystem = new UnreliableFileSystem(.2);
+	static final FileSystem fileSystem = new UnreliableFileSystem(.1);
 
 	static final HtmlConverter converter = new FileSystemLinkedConverter(
 			fileSystem, new PoisonableConverter(poison,
@@ -32,7 +33,13 @@ public class App {
 				Thread.currentThread().getId(), Calendar.getInstance(), text);
 	}
 
-	static final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+	static final CyclicBarrier repairSyncer = new CyclicBarrier(numThreads,
+			new Runnable() {
+				@Override
+				public void run() {
+					tryFixFileSystem();
+				}
+			});
 
 	static class Runner implements Runnable {
 		@Override
@@ -52,31 +59,29 @@ public class App {
 			if (retries <= 0)
 				throw new IllegalArgumentException();
 			try {
-				lock.readLock().lock();
 				converter.convert(source, target);
-
-				lock.readLock().unlock();
 			} catch (ConversionFailedException e) {
 
-				lock.readLock().unlock();
-				if (!fileSystem.isUp()) {
+				if (repairSyncer.getNumberWaiting() > 0 || !fileSystem.isUp()) {
 					log("Filesystem is down");
 
 					// If the file system is down, one thread should
-					// enter the write lock and fix it, while the others wait
-					// for it.
+					// repair it, but only after all of the threads
+					// finish the conversion.
+					try {
+						repairSyncer.await();
+					} catch (InterruptedException | BrokenBarrierException e1) {
+						e1.printStackTrace();
+					} // Neither of these should ever happen
 
-					// After the first thread repairs the filesystem, the other
-					// threads will see that it's back up and do nothing. This
-					// is not optimal, because each thread will still
-					// acquire the lock, perform an extra isUp(), then exit.
+					// We will only get here after one of the threads runs the
+					// CyclicBarrier's barrierAction and repairs the filesystem.
 
-					lock.writeLock().lock();
-					tryFixFileSystem();
-					lock.writeLock().unlock();
-				}
-
-				if (retries == 1) {
+					log(" Filesystem repaired; retrying");
+					// Repairing the filesystem does not count as a failed
+					// conversion to give up on a poison message
+					return tryConvert(source, target, retries);
+				} else if (retries == 1) {
 					log(" Conversion failed; giving up");
 					return false;
 				} else {
@@ -88,17 +93,17 @@ public class App {
 			log(" Conversion succeeded");
 			return true;
 		}
+	}
 
-		static void tryFixFileSystem() {
-			int tries = 0;
-			while (!fileSystem.isUp()) {
-				if (++tries > maxRetries) {
-					log("Couldn't repair filesystem; exiting");
-					System.exit(1);
-				}
-				log("Repairing filesystem");
-				fileSystem.tryFix();
+	static void tryFixFileSystem() {
+		int tries = 0;
+		do {
+			if (++tries > maxRetries) {
+				log("Couldn't repair filesystem; exiting");
+				System.exit(1);
 			}
-		}
+			log("Repairing filesystem");
+			fileSystem.tryFix();
+		} while (!fileSystem.isUp());
 	}
 }
