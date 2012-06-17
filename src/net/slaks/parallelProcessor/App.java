@@ -61,15 +61,19 @@ public class App {
 				lock.readLock().unlock();
 				if (!fileSystem.isUp()) {
 					log("Filesystem is down");
+
 					// If the file system is down, one thread should
 					// enter the write lock and fix it, while the others wait
 					// for it.
 
-					if (lock.writeLock().tryLock()) {
-						log("Repairing filesystem");
-						tryFixFileSystem();
-						lock.writeLock().unlock();
-					}
+					// After the first thread repairs the filesystem, the other
+					// threads will see that it's back up and do nothing. This
+					// is not optimal, because each thread will still
+					// acquire the lock, perform an extra isUp(), then exit.
+
+					lock.writeLock().lock();
+					tryFixFileSystem();
+					lock.writeLock().unlock();
 				}
 
 				if (retries == 1) {
@@ -87,13 +91,14 @@ public class App {
 
 		static void tryFixFileSystem() {
 			int tries = 0;
-			do {
+			while (!fileSystem.isUp()) {
 				if (++tries > maxRetries) {
 					log("Couldn't repair filesystem; exiting");
 					System.exit(1);
 				}
+				log("Repairing filesystem");
 				fileSystem.tryFix();
-			} while (!fileSystem.isUp());
+			}
 		}
 	}
 }
