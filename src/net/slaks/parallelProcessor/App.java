@@ -14,7 +14,7 @@ public class App {
 	static final FileSource fileSource = new RandomFileSource("a", "b", "c",
 			poison);
 
-	static final FileSystem fileSystem = new UnreliableFileSystem(.1);
+	static final FileSystem fileSystem = new UnreliableFileSystem(.01);
 
 	static final HtmlConverter converter = new FileSystemLinkedConverter(
 			fileSystem, new PoisonableConverter(poison,
@@ -61,7 +61,10 @@ public class App {
 			try {
 				converter.convert(source, target);
 			} catch (ConversionFailedException e) {
-
+				// isUp() may be slow. As an optimization, I first check whether
+				// any threads already detected a failure. This is thread-safe
+				// because it will only get reset to 0 when all of the threads
+				// have already gotten past here.
 				if (repairSyncer.getNumberWaiting() > 0 || !fileSystem.isUp()) {
 					log("Filesystem is down");
 
